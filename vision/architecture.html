@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>자세교정 시스템 아키텍처</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Noto+Sans+KR:wght@300;400;500;700&display=swap');
+
+  :root {
+    --bg: #0d0f14;
+    --surface: #141720;
+    --border: #1e2330;
+    --accent-blue: #4a9eff;
+    --accent-green: #3dd68c;
+    --accent-orange: #ff8c42;
+    --accent-purple: #9b7dff;
+    --accent-red: #ff5c5c;
+    --accent-yellow: #ffd166;
+    --text-primary: #e8ecf4;
+    --text-secondary: #7a8499;
+    --text-mono: #a8b4cc;
+    --my-part: rgba(74, 158, 255, 0.08);
+    --my-part-border: rgba(74, 158, 255, 0.4);
+    --team-part: rgba(61, 214, 140, 0.06);
+    --team-part-border: rgba(61, 214, 140, 0.3);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text-primary);
+    font-family: 'Noto Sans KR', sans-serif;
+    min-height: 100vh;
+    padding: 40px 32px;
+  }
+
+  /* Header */
+  .header {
+    margin-bottom: 48px;
+  }
+  .header-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--accent-blue);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .header-title {
+    font-size: 26px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 6px;
+  }
+  .header-sub {
+    font-size: 13px;
+    color: var(--text-secondary);
+    font-weight: 300;
+  }
+
+  /* Legend */
+  .legend {
+    display: flex;
+    gap: 24px;
+    margin-bottom: 40px;
+    flex-wrap: wrap;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-family: 'IBM Plex Mono', monospace;
+  }
+  .legend-dot {
+    width: 10px; height: 10px;
+    border-radius: 2px;
+  }
+
+  /* Main grid */
+  .arch {
+    display: grid;
+    grid-template-columns: 220px 1fr 200px;
+    grid-template-rows: auto auto auto;
+    gap: 0;
+    position: relative;
+  }
+
+  /* Layer labels */
+  .layer-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    transform: rotate(180deg);
+    padding: 16px 8px;
+    border-right: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Panels */
+  .panel {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 20px;
+    position: relative;
+    background: var(--surface);
+  }
+  .panel.my-part {
+    background: var(--my-part);
+    border-color: var(--my-part-border);
+  }
+  .panel.team-part {
+    background: var(--team-part);
+    border-color: var(--team-part-border);
+  }
+
+  .panel-tag {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 3px;
+    display: inline-block;
+    margin-bottom: 10px;
+  }
+  .tag-me { background: rgba(74,158,255,0.15); color: var(--accent-blue); }
+  .tag-team { background: rgba(61,214,140,0.12); color: var(--accent-green); }
+  .tag-infra { background: rgba(155,125,255,0.12); color: var(--accent-purple); }
+
+  .panel-title {
+    font-size: 14px;
+    font-weight: 700;
+    margin-bottom: 12px;
+    color: var(--text-primary);
+  }
+
+  .item {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin-bottom: 7px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+  }
+  .item-dot {
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    margin-top: 5px;
+    flex-shrink: 0;
+  }
+  .item code {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10.5px;
+    color: var(--text-mono);
+    background: rgba(255,255,255,0.04);
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+
+  /* Flow section */
+  .flow-section {
+    margin: 32px 0;
+  }
+  .flow-title {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* Arrow rows */
+  .flow-grid {
+    display: grid;
+    gap: 12px;
+  }
+  .flow-row {
+    display: grid;
+    grid-template-columns: 160px 40px 160px 40px 160px 40px 160px;
+    align-items: center;
+    gap: 0;
+  }
+  .flow-node {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 12px;
+    background: var(--surface);
+    text-align: center;
+  }
+  .flow-node.highlight-blue { border-color: var(--my-part-border); background: var(--my-part); }
+  .flow-node.highlight-green { border-color: var(--team-part-border); background: var(--team-part); }
+  .flow-node.highlight-purple { border-color: rgba(155,125,255,0.35); background: rgba(155,125,255,0.06); }
+  .flow-node.highlight-orange { border-color: rgba(255,140,66,0.35); background: rgba(255,140,66,0.06); }
+
+  .flow-node-label {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 3px;
+  }
+  .flow-node-sub {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9.5px;
+    color: var(--text-secondary);
+  }
+
+  .flow-arrow {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+  }
+  .arrow-line {
+    height: 1px;
+    width: 28px;
+    position: relative;
+  }
+  .arrow-line::after {
+    content: '→';
+    position: absolute;
+    right: -4px;
+    top: -8px;
+    font-size: 13px;
+  }
+  .arrow-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 8.5px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+  }
+
+  /* Path colors */
+  .path-realtime .arrow-line { background: var(--accent-blue); }
+  .path-realtime .arrow-line::after { color: var(--accent-blue); }
+  .path-realtime .arrow-label { color: var(--accent-blue); }
+
+  .path-async .arrow-line { background: var(--accent-purple); }
+  .path-async .arrow-line::after { color: var(--accent-purple); }
+  .path-async .arrow-label { color: var(--accent-purple); }
+
+  .path-calib .arrow-line { background: var(--accent-yellow); }
+  .path-calib .arrow-line::after { color: var(--accent-yellow); }
+  .path-calib .arrow-label { color: var(--accent-yellow); }
+
+  /* Path legend */
+  .path-legend {
+    display: flex;
+    gap: 24px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+  .path-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    color: var(--text-secondary);
+  }
+  .path-line {
+    width: 24px; height: 2px;
+    border-radius: 1px;
+  }
+
+  /* Latency table */
+  .latency-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 16px;
+    font-size: 12px;
+  }
+  .latency-table th {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    text-align: left;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    font-weight: 400;
+  }
+  .latency-table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid rgba(30,35,48,0.5);
+    color: var(--text-secondary);
+    vertical-align: top;
+  }
+  .latency-table td:first-child { color: var(--text-primary); }
+  .latency-num {
+    font-family: 'IBM Plex Mono', monospace;
+    color: var(--accent-green) !important;
+    font-size: 11px;
+  }
+
+  /* Divider */
+  .divider {
+    height: 1px;
+    background: var(--border);
+    margin: 36px 0;
+  }
+
+  /* Section header */
+  .section-header {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* Panels grid */
+  .panels-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+  .panels-grid-3 {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+
+  /* Concern box */
+  .concern {
+    border: 1px solid rgba(255,92,92,0.25);
+    background: rgba(255,92,92,0.04);
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin-top: 12px;
+  }
+  .concern-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 1.5px;
+    color: var(--accent-red);
+    margin-bottom: 6px;
+  }
+  .concern-text {
+    font-size: 11.5px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+  }
+
+  /* JSON preview */
+  .json-block {
+    background: #0a0c10;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    line-height: 1.7;
+    color: var(--text-mono);
+    margin-top: 12px;
+  }
+  .json-key { color: #7ec8e3; }
+  .json-str { color: #a8d8a8; }
+  .json-num { color: #ffb347; }
+  .json-bool { color: #ff8fab; }
+
+  /* Thread box */
+  .thread-box {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .thread-header {
+    padding: 10px 14px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 1px;
+    border-bottom: 1px solid var(--border);
+  }
+  .thread-body {
+    padding: 12px 14px;
+  }
+
+  /* Badge */
+  .badge {
+    display: inline-block;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    padding: 2px 7px;
+    border-radius: 3px;
+    margin-left: 6px;
+  }
+  .badge-blue { background: rgba(74,158,255,0.15); color: var(--accent-blue); }
+  .badge-green { background: rgba(61,214,140,0.12); color: var(--accent-green); }
+  .badge-orange { background: rgba(255,140,66,0.15); color: var(--accent-orange); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-label">System Architecture</div>
+  <div class="header-title">자세교정 시스템 아키텍처</div>
+  <div class="header-sub">실시간 경로 / 저장 경로 분리 · 멀티스레드 설계 · 캘리브레이션 흐름 포함</div>
+</div>
+
+<!-- Legend -->
+<div class="legend">
+  <div class="legend-item">
+    <div class="legend-dot" style="background:var(--accent-blue);"></div>
+    내 파트 (캠 분석 + Unity)
+  </div>
+  <div class="legend-item">
+    <div class="legend-dot" style="background:var(--accent-green);"></div>
+    팀원 파트
+  </div>
+  <div class="legend-item">
+    <div class="legend-dot" style="background:var(--accent-purple);"></div>
+    공통 인프라
+  </div>
+</div>
+
+<!-- ───────────────────────────────────────── -->
+<!-- SECTION 1: 데이터 흐름 -->
+<!-- ───────────────────────────────────────── -->
+<div class="section-header">01 — 전체 데이터 흐름</div>
+
+<div class="path-legend">
+  <div class="path-legend-item">
+    <div class="path-line" style="background:var(--accent-blue);"></div>
+    실시간 경로 (목표 &lt;100ms)
+  </div>
+  <div class="path-legend-item">
+    <div class="path-line" style="background:var(--accent-purple);"></div>
+    저장 경로 (비동기)
+  </div>
+  <div class="path-legend-item">
+    <div class="path-line" style="background:var(--accent-yellow);"></div>
+    캘리브레이션 경로
+  </div>
+</div>
+
+<div class="flow-grid">
+
+  <!-- Row 1: 실시간 경로 -->
+  <div style="margin-bottom:4px;">
+    <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--accent-blue);letter-spacing:1px;margin-bottom:8px;">REALTIME PATH</div>
+    <div class="flow-row">
+      <div class="flow-node highlight-blue">
+        <div class="flow-node-label">웹캠</div>
+        <div class="flow-node-sub">OpenCV · 30fps</div>
+      </div>
+      <div class="flow-arrow path-realtime">
+        <div class="arrow-line"></div>
+        <div class="arrow-label">캡처</div>
+      </div>
+      <div class="flow-node highlight-blue">
+        <div class="flow-node-label">캠 분석</div>
+        <div class="flow-node-sub">MediaPipe · Thread1</div>
+      </div>
+      <div class="flow-arrow path-realtime">
+        <div class="arrow-line"></div>
+        <div class="arrow-label">공유상태</div>
+      </div>
+      <div class="flow-node highlight-orange">
+        <div class="flow-node-label">병합 + 판정</div>
+        <div class="flow-node-sub">Main Thread</div>
+      </div>
+      <div class="flow-arrow path-realtime">
+        <div class="arrow-line"></div>
+        <div class="arrow-label">ZeroMQ</div>
+      </div>
+      <div class="flow-node highlight-blue">
+        <div class="flow-node-label">Unity</div>
+        <div class="flow-node-sub">캐릭터 렌더링</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Row 2: 압력센서 -->
+  <div style="margin-bottom:4px;">
+    <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--accent-green);letter-spacing:1px;margin-bottom:8px;">SENSOR PATH</div>
+    <div class="flow-row">
+      <div class="flow-node highlight-green">
+        <div class="flow-node-label">압력센서</div>
+        <div class="flow-node-sub">Arduino</div>
+      </div>
+      <div class="flow-arrow path-realtime" style="--accent-blue:var(--accent-green);">
+        <div class="arrow-line" style="background:var(--accent-green);"></div>
+        <div class="arrow-label" style="color:var(--accent-green);">Serial 115200</div>
+      </div>
+      <div class="flow-node highlight-green">
+        <div class="flow-node-label">압력 분석</div>
+        <div class="flow-node-sub">pyserial · Thread2</div>
+      </div>
+      <div class="flow-arrow">
+        <div class="arrow-line" style="background:var(--accent-green);"></div>
+        <div class="arrow-label" style="color:var(--accent-green);">공유상태</div>
+      </div>
+      <div class="flow-node" style="border-color:transparent;background:transparent;"></div>
+      <div class="flow-arrow" style="visibility:hidden;"></div>
+      <div class="flow-node" style="border-color:transparent;background:transparent;"></div>
+    </div>
+  </div>
+
+  <!-- Row 3: 저장 경로 -->
+  <div>
+    <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--accent-purple);letter-spacing:1px;margin-bottom:8px;">ASYNC STORAGE PATH</div>
+    <div class="flow-row">
+      <div class="flow-node" style="border-color:transparent;background:transparent;"></div>
+      <div class="flow-arrow" style="visibility:hidden;"></div>
+      <div class="flow-node" style="border-color:transparent;background:transparent;"></div>
+      <div class="flow-arrow" style="visibility:hidden;"></div>
+      <div class="flow-node highlight-orange">
+        <div class="flow-node-label">병합 + 판정</div>
+        <div class="flow-node-sub">Main Thread</div>
+      </div>
+      <div class="flow-arrow path-async">
+        <div class="arrow-line"></div>
+        <div class="arrow-label">비동기 저장</div>
+      </div>
+      <div class="flow-node highlight-purple">
+        <div class="flow-node-label">PostgreSQL</div>
+        <div class="flow-node-sub">Backend · FastAPI</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="divider"></div>
+
+<!-- ───────────────────────────────────────── -->
+<!-- SECTION 2: 계층별 상세 -->
+<!-- ───────────────────────────────────────── -->
+<div class="section-header">02 — 계층별 상세 구성</div>
+
+<div class="panels-grid">
+
+  <!-- 수집 계층 -->
+  <div class="panel">
+    <div class="panel-tag tag-team">수집 계층</div>
+    <div class="panel-title">데이터 수집</div>
+    <div class="item">
+      <div class="item-dot" style="background:var(--accent-green);"></div>
+      <div>압력센서 × N개 → Arduino → <code>pyserial</code></div>
+    </div>
+    <div class="item">
+      <div class="item-dot" style="background:var(--accent-blue);"></div>
+      <div>웹캠 → <code>OpenCV</code> 캡처 (30fps)</div>
+    </div>
+    <div class="item">
+      <div class="item-dot" style="background:var(--text-secondary);"></div>
+      <div>Serial 보드레이트 <code>115200</code> 권장</div>
+    </div>
+    <div class="concern">
+      <div class="concern-label">⚠ 협의 필요</div>
+      <div class="concern-text">유선 USB vs 무선(BLE) 결정 필요. MVP는 유선 추천.</div>
+    </div>
+  </div>
+
+  <!-- 분석 계층 -->
+  <div class="panel my-part">
+    <div class="panel-tag tag-me">분석 계층 (일부 내 파트)</div>
+    <div class="panel-title">멀티스레드 분석</div>
+    <div class="item">
+      <div class="item-dot" style="background:var(--accent-blue);"></div>
+      <div><b>Thread 1 (내 파트)</b> — MediaPipe Pose, PnP head pose, 캘리브레이션</div>
+    </div>
+    <div class="item">
+      <div class="item-dot" style="background:var(--accent-green);"></div>
+      <div><b>Thread 2 (팀원)</b> — 압력 raw → 좌우 분포, 편중도 계산</div>
+    </div>
+    <div class="item">
+      <div class="item-dot" style="background:var(--accent-orange);"></div>
+      <div><b>Main Thread (팀원)</b> — 공유상태 병합, posture_state 판정, ZeroMQ 전송</div>
+    </div>
+    <div class="item">
+      <div class="item-dot" style="background:var(--text-secondary);"></div>
+      <div>공유상태: <code>threading.Lock</code> 보호 dict</div>
+    </div>
+  </div>
+
+  <!-- UI 계층 -->
+  <div class="panel my-part">
+    <div class="panel-tag tag-me">UI 계층 (내 파트)</div>
+    <div class="panel-title">Unity 렌더링</div>
+    <div class="item">
+      <div class="item-dot" style="background:var(--accent-blue);"></div>
+      <div>ZeroMQ SUB → JSON 파싱 → Humanoid 본 제어</div>
+    </div>
+    <div class="item">
+      <div class="item-dot" style="background:var(--accent-blue);"></div>
+      <div>Neck / Head: <code>neck_angle + head_pitch</code></div>
+    </div>
+    <div class="item">
+      <div class="item-dot" style="background:var(--accent-blue);"></div>
+      <div>Shoulder: <code>shoulder_tilt</code></div>
+    </div>
+    <div class="item">
+      <div class="item-dot" style="background:var(--accent-blue);"></div>
+      <div>PiP: RenderTexture → UI RawImage (우측 하단)</div>
+    </div>
+    <div class="concern">
+      <div class="concern-label">⚠ 사전 검증 필요</div>
+      <div class="concern-text">NetMQ Unity 메인스레드 제약 확인. TCP 직접 구현이 더 안전할 수 있음.</div>
+    </div>
+  </div>
+
+  <!-- 백엔드 계층 -->
+  <div class="panel">
+    <div class="panel-tag tag-infra">백엔드 계층 (팀원)</div>
+    <div class="panel-title">저장 + Web UI</div>
+    <div class="item">
+      <div class="item-dot" style="background:var(--accent-purple);"></div>
+      <div>FastAPI + PostgreSQL (시계열 자세 데이터)</div>
+    </div>
+    <div class="item">
+      <div class="item-dot" style="background:var(--accent-purple);"></div>
+      <div>캘리브레이션 baseline 저장/불러오기</div>
+    </div>
+    <div class="item">
+      <div class="item-dot" style="background:var(--accent-purple);"></div>
+      <div>Web 대시보드: 누적 피로도, 자세 이력 그래프</div>
+    </div>
+    <div class="item">
+      <div class="item-dot" style="background:var(--accent-purple);"></div>
+      <div>일/주간 리포트 생성</div>
+    </div>
+    <div class="concern">
+      <div class="concern-label">⚠ 중요</div>
+      <div class="concern-text">실시간 경로에 백엔드 개입 금지. 저장은 반드시 비동기.</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="divider"></div>
+
+<!-- ───────────────────────────────────────── -->
+<!-- SECTION 3: 스레드 구조 -->
+<!-- ───────────────────────────────────────── -->
+<div class="section-header">03 — Python 멀티스레드 구조</div>
+
+<div class="panels-grid-3">
+
+  <div class="thread-box">
+    <div class="thread-header" style="background:rgba(74,158,255,0.08);color:var(--accent-blue);">
+      Thread 1 — 캠 분석 <span class="badge badge-blue">내 파트</span>
+    </div>
+    <div class="thread-body">
+      <div class="item"><div class="item-dot" style="background:var(--accent-blue);"></div><div>OpenCV 캡처 루프</div></div>
+      <div class="item"><div class="item-dot" style="background:var(--accent-blue);"></div><div>MediaPipe Pose 추론</div></div>
+      <div class="item"><div class="item-dot" style="background:var(--accent-blue);"></div><div>neck_angle / head_pitch(PnP) / face_width / shoulder_tilt 계산</div></div>
+      <div class="item"><div class="item-dot" style="background:var(--accent-blue);"></div><div>캘리브레이션 baseline 적용</div></div>
+      <div class="item"><div class="item-dot" style="background:var(--accent-blue);"></div><div>shared_state 업데이트 (Lock)</div></div>
+    </div>
+  </div>
+
+  <div class="thread-box">
+    <div class="thread-header" style="background:rgba(61,214,140,0.07);color:var(--accent-green);">
+      Thread 2 — 압력 분석 <span class="badge badge-green">팀원</span>
+    </div>
+    <div class="thread-body">
+      <div class="item"><div class="item-dot" style="background:var(--accent-green);"></div><div>pyserial 수신 루프</div></div>
+      <div class="item"><div class="item-dot" style="background:var(--accent-green);"></div><div>좌/우/전/후 압력 분포 계산</div></div>
+      <div class="item"><div class="item-dot" style="background:var(--accent-green);"></div><div>편중도 비율 계산</div></div>
+      <div class="item"><div class="item-dot" style="background:var(--accent-green);"></div><div>자리 이탈 감지 (전체압력 ≈ 0)</div></div>
+      <div class="item"><div class="item-dot" style="background:var(--accent-green);"></div><div>shared_state 업데이트 (Lock)</div></div>
+    </div>
+  </div>
+
+  <div class="thread-box">
+    <div class="thread-header" style="background:rgba(255,140,66,0.08);color:var(--accent-orange);">
+      Main Thread — 병합 + 전송 <span class="badge badge-orange">팀원</span>
+    </div>
+    <div class="thread-body">
+      <div class="item"><div class="item-dot" style="background:var(--accent-orange);"></div><div>shared_state polling (33ms)</div></div>
+      <div class="item"><div class="item-dot" style="background:var(--accent-orange);"></div><div>타임스탬프 동기화 확인</div></div>
+      <div class="item"><div class="item-dot" style="background:var(--accent-orange);"></div><div>복합 판정 (posture_state)</div></div>
+      <div class="item"><div class="item-dot" style="background:var(--accent-orange);"></div><div>시간 필터링 (3초 지속 판정)</div></div>
+      <div class="item"><div class="item-dot" style="background:var(--accent-orange);"></div><div>ZeroMQ PUB → Unity</div></div>
+      <div class="item"><div class="item-dot" style="background:var(--accent-orange);"></div><div>비동기 → PostgreSQL 저장</div></div>
+    </div>
+  </div>
+
+</div>
+
+<div class="divider"></div>
+
+<!-- ───────────────────────────────────────── -->
+<!-- SECTION 4: 캘리브레이션 흐름 -->
+<!-- ───────────────────────────────────────── -->
+<div class="section-header">04 — 캘리브레이션 흐름</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:32px;">
+
+  <div class="panel">
+    <div class="panel-title" style="font-size:13px;margin-bottom:14px;">초기 캘리브레이션</div>
+    <div class="item"><div class="item-dot" style="background:var(--accent-yellow);"></div><div>① UI: "올바른 자세로 앉으세요" 안내</div></div>
+    <div class="item"><div class="item-dot" style="background:var(--accent-yellow);"></div><div>② Thread 1: 3초간 측정 → 평균값 산출</div></div>
+    <div class="item"><div class="item-dot" style="background:var(--accent-yellow);"></div><div>③ baseline 로컬 저장 (json) + 백엔드 저장</div></div>
+    <div class="item"><div class="item-dot" style="background:var(--accent-yellow);"></div><div>④ 이후 판정은 baseline 대비 편차로 수행</div></div>
+    <div class="item"><div class="item-dot" style="background:var(--text-secondary);"></div><div>앱 재시작 시 백엔드에서 baseline 불러오기</div></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title" style="font-size:13px;margin-bottom:14px;">재캘리브레이션 트리거</div>
+    <div class="item"><div class="item-dot" style="background:var(--accent-yellow);"></div><div>단축키 또는 UI 버튼으로 언제든 재실행</div></div>
+    <div class="item"><div class="item-dot" style="background:var(--accent-yellow);"></div><div>의자 높이 변경 / 자리 이동 시 필수</div></div>
+    <div class="item"><div class="item-dot" style="background:var(--text-secondary);"></div><div>캘리브레이션 중에는 판정 일시 중단</div></div>
+    <div class="concern">
+      <div class="concern-label">⚠ 협의 필요</div>
+      <div class="concern-text">캘리브레이션 UI 담당 확정 필요. 트리거 방식 (키보드 단축키 vs 버튼) 결정 필요.</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="divider"></div>
+
+<!-- ───────────────────────────────────────── -->
+<!-- SECTION 5: 통신 인터페이스 -->
+<!-- ───────────────────────────────────────── -->
+<div class="section-header">05 — 통신 인터페이스</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:32px;">
+
+  <div>
+    <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--text-secondary);margin-bottom:10px;">Python → Unity JSON 포맷</div>
+    <div class="json-block">
+{<br>
+&nbsp;&nbsp;<span class="json-key">"neck_angle"</span>: <span class="json-num">15.3</span>,<br>
+&nbsp;&nbsp;<span class="json-key">"head_pitch"</span>: <span class="json-num">8.2</span>,<br>
+&nbsp;&nbsp;<span class="json-key">"face_width"</span>: <span class="json-num">0.18</span>,<br>
+&nbsp;&nbsp;<span class="json-key">"shoulder_tilt"</span>: <span class="json-num">3.2</span>,<br>
+&nbsp;&nbsp;<span class="json-key">"posture_state"</span>: <span class="json-str">"GOOD"</span>,<br>
+&nbsp;&nbsp;<span class="json-key">"calibrated"</span>: <span class="json-bool">true</span>,<br>
+&nbsp;&nbsp;<span class="json-key">"timestamp"</span>: <span class="json-num">1715123456.789</span><br>
+}
+    </div>
+  </div>
+
+  <div>
+    <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--text-secondary);margin-bottom:10px;">구간별 통신 방식 및 지연</div>
+    <table class="latency-table">
+      <tr>
+        <th>구간</th>
+        <th>방식</th>
+        <th>지연</th>
+      </tr>
+      <tr>
+        <td>캠 캡처</td>
+        <td>OpenCV</td>
+        <td class="latency-num">~33ms</td>
+      </tr>
+      <tr>
+        <td>MediaPipe 추론</td>
+        <td>CPU (M칩)</td>
+        <td class="latency-num">~30ms</td>
+      </tr>
+      <tr>
+        <td>Arduino → Python</td>
+        <td>Serial 115200</td>
+        <td class="latency-num">&lt;5ms</td>
+      </tr>
+      <tr>
+        <td>Python → Unity</td>
+        <td>ZeroMQ localhost</td>
+        <td class="latency-num">&lt;3ms</td>
+      </tr>
+      <tr>
+        <td>Unity 렌더링</td>
+        <td>60fps target</td>
+        <td class="latency-num">~16ms</td>
+      </tr>
+      <tr>
+        <td style="font-weight:600;color:var(--text-primary);">총합 (실시간 경로)</td>
+        <td></td>
+        <td class="latency-num" style="font-weight:700;">~80-100ms ✓</td>
+      </tr>
+      <tr>
+        <td>백엔드 저장</td>
+        <td>비동기 HTTP</td>
+        <td class="latency-num">무관 (비동기)</td>
+      </tr>
+    </table>
+  </div>
+
+</div>
+
+<div class="divider"></div>
+
+<!-- ───────────────────────────────────────── -->
+<!-- SECTION 6: posture_state 정의 -->
+<!-- ───────────────────────────────────────── -->
+<div class="section-header">06 — posture_state 정의 (초안)</div>
+
+<table class="latency-table" style="margin-bottom:32px;">
+  <tr>
+    <th>State</th>
+    <th>캠 조건</th>
+    <th>압력 조건</th>
+    <th>비고</th>
+  </tr>
+  <tr>
+    <td><code style="color:var(--accent-green);font-family:'IBM Plex Mono',monospace;">GOOD</code></td>
+    <td>정상 범위</td>
+    <td>균등 분포</td>
+    <td>—</td>
+  </tr>
+  <tr>
+    <td><code style="color:var(--accent-red);font-family:'IBM Plex Mono',monospace;">BAD_NECK</code></td>
+    <td>neck편차&gt;15° AND pitch편차&gt;10° AND face+15%</td>
+    <td>—</td>
+    <td>3조건 AND, 3초 지속</td>
+  </tr>
+  <tr>
+    <td><code style="color:var(--accent-red);font-family:'IBM Plex Mono',monospace;">BAD_SHOULDER</code></td>
+    <td>shoulder_tilt_ratio 편차 &gt; 0.1</td>
+    <td>—</td>
+    <td>3초 지속</td>
+  </tr>
+  <tr>
+    <td><code style="color:var(--accent-red);font-family:'IBM Plex Mono',monospace;">BAD_WEIGHT</code></td>
+    <td>—</td>
+    <td>좌우 압력비 &gt; 1.4</td>
+    <td>3초 지속</td>
+  </tr>
+  <tr>
+    <td><code style="color:var(--accent-red);font-family:'IBM Plex Mono',monospace;">BAD_COMPLEX</code></td>
+    <td>shoulder_tilt 편차 &gt; 0.1</td>
+    <td>압력 편중 &gt; 1.4x</td>
+    <td>척추 측만 의심</td>
+  </tr>
+  <tr>
+    <td><code style="color:var(--accent-yellow);font-family:'IBM Plex Mono',monospace;">ABSENT</code></td>
+    <td>랜드마크 미감지</td>
+    <td>전체 압력 ≈ 0</td>
+    <td>자리 이탈</td>
+  </tr>
+  <tr>
+    <td><code style="color:var(--text-secondary);font-family:'IBM Plex Mono',monospace;">CALIBRATING</code></td>
+    <td>—</td>
+    <td>—</td>
+    <td>캘리브레이션 중, 판정 중단</td>
+  </tr>
+</table>
+
+<!-- Footer note -->
+<div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--text-secondary);border-top:1px solid var(--border);padding-top:16px;">
+  ⚠ &nbsp;임계값은 모두 초안 — 캘리브레이션 실험 후 튜닝 필요 &nbsp;·&nbsp; posture_state 항목은 팀 전체 협의 필요
+</div>
+
+</body>
+</html>
