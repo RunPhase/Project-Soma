@@ -18,13 +18,32 @@ Thread 1 — 캠 분석 파트 (내 담당)
 """
 
 import math
+import queue
 import time
 import threading
+import urllib.request
+from pathlib import Path
 from typing import Optional
 
 import cv2
 import mediapipe as mp
+from mediapipe.tasks import python as mp_python
+from mediapipe.tasks.python import vision as mp_vision
 import numpy as np
+
+_MODEL_URL = (
+    "https://storage.googleapis.com/mediapipe-models/"
+    "pose_landmarker/pose_landmarker_full/float16/latest/pose_landmarker_full.task"
+)
+_MODEL_PATH = Path(__file__).parent / "pose_landmarker_full.task"
+
+
+def _ensure_model() -> str:
+    if not _MODEL_PATH.exists():
+        print(f"[PoseAnalyzer] 모델 다운로드 중 ({_MODEL_URL})...")
+        urllib.request.urlretrieve(_MODEL_URL, _MODEL_PATH)
+        print(f"[PoseAnalyzer] 모델 저장 완료: {_MODEL_PATH}")
+    return str(_MODEL_PATH)
 
 from shared_state import shared_state, state_lock
 
@@ -78,15 +97,17 @@ class PoseAnalyzer:
     def __init__(self, camera_index: int = 0):
         self.camera_index = camera_index
 
-        # MediaPipe Pose 초기화
-        self._mp_pose = mp.solutions.pose
-        self._pose = self._mp_pose.Pose(
-            static_image_mode=False,
-            model_complexity=1,       # 0=lite, 1=full, 2=heavy
-            smooth_landmarks=True,
-            min_detection_confidence=0.5,
+        # MediaPipe Pose 초기화 (Tasks API, mediapipe 0.10+)
+        options = mp_vision.PoseLandmarkerOptions(
+            base_options=mp_python.BaseOptions(model_asset_path=_ensure_model()),
+            running_mode=mp_vision.RunningMode.VIDEO,
+            num_poses=1,
+            min_pose_detection_confidence=0.5,
+            min_pose_presence_confidence=0.5,
             min_tracking_confidence=0.5,
         )
+        self._pose = mp_vision.PoseLandmarker.create_from_options(options)
+        self._start_ms = int(time.time() * 1000)
 
         # 카메라 내부 파라미터 (첫 프레임에서 해상도 확인 후 초기화)
         self._camera_matrix: Optional[np.ndarray] = None
@@ -215,12 +236,14 @@ class PoseAnalyzer:
             self._init_camera_matrix(w, h)
 
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        result = self._pose.process(rgb)
+        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+        timestamp_ms = int(time.time() * 1000) - self._start_ms
+        result = self._pose.detect_for_video(mp_image, timestamp_ms)
 
         if not result.pose_landmarks:
             return None
 
-        lms = result.pose_landmarks.landmark
+        lms = result.pose_landmarks[0]
 
         return {
             "neck_angle":    self._neck_angle(lms, w, h),
@@ -234,22 +257,16 @@ class PoseAnalyzer:
     def run(
         self,
         stop_event: threading.Event,
-        calibrator=None,       # calibrator.Calibrator 인스턴스 (선택)
-        debug: bool = False,   # True 시 OpenCV 미리보기 창 표시 (개발용)
+        calibrator=None,
+        debug_queue: Optional[queue.Queue] = None,
     ) -> None:
         """
         Thread 1 메인 루프.
 
-        - OpenCV 로 프레임 캡처
-        - analyze_frame() 호출
-        - calibrator.add_sample() 에 샘플 공급
-        - shared_state 업데이트 (state_lock 보호)
-        - stop_event.set() 으로 종료
-
         Args:
-            stop_event:  threading.Event — set() 시 루프 종료
-            calibrator:  Calibrator 인스턴스, None 이면 캘리브레이션 없이 동작
-            debug:       True 면 "PoseDebug" 창에 지표 오버레이 표시
+            stop_event:   threading.Event — set() 시 루프 종료
+            calibrator:   Calibrator 인스턴스, None 이면 캘리브레이션 없이 동작
+            debug_queue:  Queue — not None 이면 (frame, metrics) 를 넣어 메인 스레드가 imshow
         """
         cap = cv2.VideoCapture(self.camera_index)
         if not cap.isOpened():
@@ -290,38 +307,38 @@ class PoseAnalyzer:
                         calibrator.is_done() if calibrator else False
                     )
 
-                # ── 디버그 창 ────────────────────────────────────────────────
-                if debug:
-                    self._draw_debug(frame, metrics)
-                    if cv2.waitKey(1) & 0xFF == ord("q"):
-                        stop_event.set()
-                        break
+                # ── 디버그 프레임 전달 (imshow는 메인 스레드에서) ────────────
+                if debug_queue is not None:
+                    annotated = self._annotate(frame, metrics)
+                    try:
+                        debug_queue.put_nowait((annotated, metrics))
+                    except queue.Full:
+                        pass
 
         finally:
             cap.release()
-            if debug:
-                cv2.destroyAllWindows()
+            self._pose.close()
             print("[PoseAnalyzer] 스레드 종료")
 
     # ── 디버그 헬퍼 ────────────────────────────────────────────────────────────
 
     @staticmethod
-    def _draw_debug(frame: np.ndarray, metrics: Optional[dict]) -> None:
-        """프레임에 지표 텍스트 오버레이 후 imshow."""
-        if metrics:
-            lines = [
+    def _annotate(frame: np.ndarray, metrics: Optional[dict]) -> np.ndarray:
+        """프레임 복사본에 지표 텍스트를 오버레이해 반환 (imshow 호출 없음)."""
+        out = frame.copy()
+        lines = (
+            [
                 f"neck  : {metrics['neck_angle']:6.1f} deg",
                 f"pitch : {metrics['head_pitch']:6.1f} deg",
                 f"faceW : {metrics['face_width']:6.1f} px",
                 f"shld  : {metrics['shoulder_tilt']:6.3f}",
             ]
-        else:
-            lines = ["[No pose detected]"]
-
+            if metrics
+            else ["[No pose detected]"]
+        )
         y = 30
         for line in lines:
-            cv2.putText(frame, line, (10, y),
+            cv2.putText(out, line, (10, y),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 80), 2)
             y += 28
-
-        cv2.imshow("PoseDebug", frame)
+        return out

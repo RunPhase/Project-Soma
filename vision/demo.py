@@ -15,8 +15,11 @@ Main Thread / 아두이노 연동 없이 Thread 1 파트만 돌려볼 수 있다
 """
 
 import argparse
+import queue
 import threading
 import time
+
+import cv2
 
 from calibrator import Calibrator
 from pose_analyzer import PoseAnalyzer
@@ -70,9 +73,10 @@ def main() -> None:
     args = parser.parse_args()
 
     # ── 초기화 ────────────────────────────────────────────────────────────────
-    calibrator = Calibrator()
-    analyzer   = PoseAnalyzer(camera_index=args.cam)
-    stop_event = threading.Event()
+    calibrator  = Calibrator()
+    analyzer    = PoseAnalyzer(camera_index=args.cam)
+    stop_event  = threading.Event()
+    debug_queue = queue.Queue(maxsize=2) if args.debug else None
 
     # baseline 없으면 즉시 캘리브레이션 시작
     if not calibrator.is_done():
@@ -82,7 +86,7 @@ def main() -> None:
     t_pose = threading.Thread(
         target=analyzer.run,
         args=(stop_event, calibrator),
-        kwargs={"debug": args.debug},
+        kwargs={"debug_queue": debug_queue},
         name="Thread-1-Cam",
         daemon=True,
     )
@@ -103,13 +107,25 @@ def main() -> None:
     t_monitor.start()
     t_input.start()
 
-    # ── 메인은 stop_event 대기 ────────────────────────────────────────────────
+    # ── 메인 스레드: imshow 루프 (macOS는 GUI를 메인 스레드에서만 허용) ──────
     try:
         while not stop_event.is_set():
-            time.sleep(0.1)
+            if debug_queue is not None:
+                try:
+                    frame, _ = debug_queue.get(timeout=0.05)
+                    cv2.imshow("PoseDebug", frame)
+                    if cv2.waitKey(1) & 0xFF == ord("q"):
+                        stop_event.set()
+                except queue.Empty:
+                    pass
+            else:
+                time.sleep(0.1)
     except KeyboardInterrupt:
         print("\n[demo] Ctrl+C — 종료 중...")
         stop_event.set()
+    finally:
+        if args.debug:
+            cv2.destroyAllWindows()
 
     t_pose.join(timeout=3.0)
     print("[demo] 종료 완료")
