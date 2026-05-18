@@ -11,6 +11,10 @@ mediapipe>=0.10.0
 opencv-python>=4.8.0
 numpy>=1.24.0
 
+# ── 데스크탑 펫 UI ────────────────────────────────────────────────────────────
+PyQt6>=6.4.0
+pyobjc-framework-Cocoa>=10.0; sys_platform == "darwin"   # macOS: 모든 Space 표시
+
 # ── 통신 (Main Thread 파트 — 팀원, 지금은 stub) ───────────────────────────────
 pyzmq>=25.0.0
 

@@ -1,6 +1,7 @@
 {
-  "neck_angle": 136.1344008829023,
-  "head_pitch": 129.34739214600424,
-  "face_width": 73.03408746410533,
-  "shoulder_tilt": 0.1157941410961971
+  "head_lateral_tilt": 1.211454360193106,
+  "neck_compression": 1.6224705734315863,
+  "head_pitch": 169.20956235587033,
+  "face_width": 256.0727662035998,
+  "shoulder_tilt": 0.04156121990996328
 }

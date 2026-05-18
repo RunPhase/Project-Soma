@@ -27,7 +27,7 @@ from typing import Optional
 # ── 상수 ──────────────────────────────────────────────────────────────────────
 CALIB_DURATION = 3.0  # 초 — 계획서 스펙
 _BASELINE_FILE = Path(__file__).parent / "baseline.json"
-_METRIC_KEYS = ("neck_angle", "head_pitch", "face_width", "shoulder_tilt")
+_METRIC_KEYS = ("head_lateral_tilt", "neck_compression", "head_pitch", "face_width", "shoulder_tilt")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -145,10 +145,11 @@ class Calibrator:
 
         print(
             f"[Calibrator] 완료 ({len(self._samples)} 샘플)\n"
-            f"  neck_angle    = {baseline.get('neck_angle', 0):.2f}°\n"
-            f"  head_pitch    = {baseline.get('head_pitch', 0):.2f}°\n"
-            f"  face_width    = {baseline.get('face_width', 0):.1f} px\n"
-            f"  shoulder_tilt = {baseline.get('shoulder_tilt', 0):.4f}"
+            f"  head_lateral_tilt = {baseline.get('head_lateral_tilt', 0):.2f}°\n"
+            f"  neck_compression  = {baseline.get('neck_compression', 0):.4f}\n"
+            f"  head_pitch        = {baseline.get('head_pitch', 0):.2f}°\n"
+            f"  face_width        = {baseline.get('face_width', 0):.1f} px\n"
+            f"  shoulder_tilt     = {baseline.get('shoulder_tilt', 0):.4f}"
         )
 
     # ── 편차 계산 헬퍼 (Main Thread 판정 보조) ────────────────────────────────
@@ -159,10 +160,11 @@ class Calibrator:
 
         Returns:
             {
-                "neck_deviation":   float,  # 도°
-                "pitch_deviation":  float,  # 도°
-                "face_deviation":   float,  # 비율 (+ 면 카메라에 가까워짐)
-                "tilt_deviation":   float,  # 비율
+                "lateral_deviation":     float,  # 도° — 좌우 기울기 편차
+                "compression_deviation": float,  # 비율 — 음수면 거북목 방향
+                "pitch_deviation":       float,  # 도° — 앞뒤 기울기 편차
+                "face_deviation":        float,  # 비율 (+ 면 카메라에 가까워짐)
+                "tilt_deviation":        float,  # 비율 — 어깨 기울기 편차
             }
 
         캘리브레이션 미완료 시 모든 값 0.0.
@@ -170,20 +172,22 @@ class Calibrator:
         with self._lock:
             if not self._done or not self._baseline:
                 return {
-                    "neck_deviation": 0.0,
-                    "pitch_deviation": 0.0,
-                    "face_deviation": 0.0,
-                    "tilt_deviation": 0.0,
+                    "lateral_deviation":     0.0,
+                    "compression_deviation": 0.0,
+                    "pitch_deviation":       0.0,
+                    "face_deviation":        0.0,
+                    "tilt_deviation":        0.0,
                 }
             b = self._baseline
 
         face_base = b.get("face_width", 1.0) or 1.0  # 0 나누기 방지
 
         return {
-            "neck_deviation":  current.get("neck_angle", 0.0)    - b.get("neck_angle", 0.0),
-            "pitch_deviation": current.get("head_pitch", 0.0)    - b.get("head_pitch", 0.0),
-            "face_deviation":  (current.get("face_width", 0.0)   - face_base) / face_base,
-            "tilt_deviation":  current.get("shoulder_tilt", 0.0) - b.get("shoulder_tilt", 0.0),
+            "lateral_deviation":     current.get("head_lateral_tilt", 0.0) - b.get("head_lateral_tilt", 0.0),
+            "compression_deviation": current.get("neck_compression", 0.0)  - b.get("neck_compression", 0.0),
+            "pitch_deviation":       current.get("head_pitch", 0.0)         - b.get("head_pitch", 0.0),
+            "face_deviation":        (current.get("face_width", 0.0)        - face_base) / face_base,
+            "tilt_deviation":        current.get("shoulder_tilt", 0.0)      - b.get("shoulder_tilt", 0.0),
         }
 
     # ── 파일 I/O ──────────────────────────────────────────────────────────────
@@ -214,7 +218,8 @@ class Calibrator:
             self._done = True
             print(
                 f"[Calibrator] baseline 불러오기 완료\n"
-                f"  neck={data['neck_angle']:.2f}°  "
+                f"  lateral={data['head_lateral_tilt']:.2f}°  "
+                f"compress={data['neck_compression']:.4f}  "
                 f"pitch={data['head_pitch']:.2f}°  "
                 f"faceW={data['face_width']:.1f}px  "
                 f"tilt={data['shoulder_tilt']:.4f}"

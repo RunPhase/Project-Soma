@@ -6,7 +6,7 @@ Thread 1 — 캠 분석 파트 (내 담당)
 책임:
   - OpenCV 로 웹캠 프레임 캡처
   - MediaPipe Pose 로 랜드마크 추출
-  - neck_angle / head_pitch(PnP) / face_width / shoulder_tilt 계산
+  - head_lateral_tilt / neck_compression / head_pitch(PnP) / face_width / shoulder_tilt 계산
   - Calibrator 와 연동해 캘리브레이션 샘플 공급
   - shared_state 업데이트 (state_lock 보호)
 
@@ -132,18 +132,16 @@ class PoseAnalyzer:
 
     # ── 지표 계산 ──────────────────────────────────────────────────────────────
 
-    def _neck_angle(self, lms, w: int, h: int) -> float:
+    def _head_lateral_tilt(self, lms, w: int, h: int) -> float:
         """
-        목 전방 기울기 (도°).
+        머리 좌우 기울기 (도°).
 
-        계산:
-          mid_shoulder = (left_shoulder + right_shoulder) / 2
-          vector = nose - mid_shoulder  (이미지 좌표)
-          angle = arctan2(|dx|, -dy)
-            → 코가 어깨 중심 바로 위: 0°
-            → 코가 좌우로 치우치거나 목이 앞으로 숙을수록 증가
+        정면 카메라 기준, 어깨 중심 → 코 벡터가 수직에서 얼마나 옆으로 벗어났는지 측정.
+          0°: 코가 어깨 중심 바로 위 (정상)
+          클수록: 머리가 한쪽으로 기울어진 것
 
-        이미지 좌표는 y 가 아래로 증가하므로 -dy 로 뒤집어 "위" 방향을 양수 처리.
+        전방 기울기(거북목)는 정면 카메라에서 dx/dy 변화로 잡히지 않으므로
+        neck_compression 또는 head_pitch(PnP) 를 사용할 것.
         """
         nx, ny = self._lm_px(lms, "nose", w, h)
         lsx, lsy = self._lm_px(lms, "left_shoulder", w, h)
@@ -156,6 +154,25 @@ class PoseAnalyzer:
         dy = ny - mid_y   # 코가 어깨보다 위 → 음수
 
         return math.degrees(math.atan2(abs(dx), -dy))
+
+    def _neck_compression(self, lms, w: int, h: int) -> float:
+        """
+        코-어깨 중심 거리를 face_width 로 정규화한 비율 (거북목 지표).
+
+        정면 카메라에서 거북목이 생기면 머리가 앞으로 쏠리며 아래로 처져
+        코-어깨 픽셀 거리가 줄어든다. face_width 로 나눠 카메라 거리 영향 제거.
+          작을수록: 머리가 어깨에 가까워짐 → 전방 기울기(거북목) 의심
+        """
+        nx, ny = self._lm_px(lms, "nose", w, h)
+        lsx, lsy = self._lm_px(lms, "left_shoulder", w, h)
+        rsx, rsy = self._lm_px(lms, "right_shoulder", w, h)
+
+        mid_x = (lsx + rsx) / 2.0
+        mid_y = (lsy + rsy) / 2.0
+
+        dist = math.hypot(nx - mid_x, ny - mid_y)
+        fw = self._face_width(lms, w, h)
+        return dist / fw if fw > 1e-6 else 0.0
 
     def _head_pitch(self, lms, w: int, h: int) -> Optional[float]:
         """
@@ -224,10 +241,11 @@ class PoseAnalyzer:
 
         Returns:
             {
-                "neck_angle":    float,  # 도°
-                "head_pitch":    float,  # 도° (PnP 실패 시 0.0 대체)
-                "face_width":    float,  # 픽셀
-                "shoulder_tilt": float,  # 0~1 비율
+                "head_lateral_tilt": float,  # 도° — 머리 좌우 기울기
+                "neck_compression":  float,  # 비율 — 코-어깨 거리/face_width (작을수록 거북목)
+                "head_pitch":        float,  # 도° — 머리 앞뒤 기울기 PnP (PnP 실패 시 0.0)
+                "face_width":        float,  # 픽셀 — 귀 간 거리 (카메라 거리 근사)
+                "shoulder_tilt":     float,  # 0~1 비율 — 어깨 좌우 기울기
             }
         """
         h, w = frame.shape[:2]
@@ -246,10 +264,11 @@ class PoseAnalyzer:
         lms = result.pose_landmarks[0]
 
         return {
-            "neck_angle":    self._neck_angle(lms, w, h),
-            "head_pitch":    self._head_pitch(lms, w, h) or 0.0,
-            "face_width":    self._face_width(lms, w, h),
-            "shoulder_tilt": self._shoulder_tilt(lms, w, h),
+            "head_lateral_tilt": self._head_lateral_tilt(lms, w, h),
+            "neck_compression":  self._neck_compression(lms, w, h),
+            "head_pitch":        self._head_pitch(lms, w, h) or 0.0,
+            "face_width":        self._face_width(lms, w, h),
+            "shoulder_tilt":     self._shoulder_tilt(lms, w, h),
         }
 
     # ── Thread 1 진입점 ────────────────────────────────────────────────────────
@@ -294,11 +313,12 @@ class PoseAnalyzer:
                 # ── shared_state 업데이트 ────────────────────────────────────
                 with state_lock:
                     if metrics:
-                        shared_state["neck_angle"]    = metrics["neck_angle"]
-                        shared_state["head_pitch"]    = metrics["head_pitch"]
-                        shared_state["face_width"]    = metrics["face_width"]
-                        shared_state["shoulder_tilt"] = metrics["shoulder_tilt"]
-                        shared_state["cam_valid"]     = True
+                        shared_state["head_lateral_tilt"] = metrics["head_lateral_tilt"]
+                        shared_state["neck_compression"]  = metrics["neck_compression"]
+                        shared_state["head_pitch"]        = metrics["head_pitch"]
+                        shared_state["face_width"]        = metrics["face_width"]
+                        shared_state["shoulder_tilt"]     = metrics["shoulder_tilt"]
+                        shared_state["cam_valid"]         = True
                     else:
                         shared_state["cam_valid"] = False
 
@@ -328,10 +348,11 @@ class PoseAnalyzer:
         out = frame.copy()
         lines = (
             [
-                f"neck  : {metrics['neck_angle']:6.1f} deg",
-                f"pitch : {metrics['head_pitch']:6.1f} deg",
-                f"faceW : {metrics['face_width']:6.1f} px",
-                f"shld  : {metrics['shoulder_tilt']:6.3f}",
+                f"lateral: {metrics['head_lateral_tilt']:6.1f} deg",
+                f"compress:{metrics['neck_compression']:6.3f}",
+                f"pitch  : {metrics['head_pitch']:6.1f} deg",
+                f"faceW  : {metrics['face_width']:6.1f} px",
+                f"shld   : {metrics['shoulder_tilt']:6.3f}",
             ]
             if metrics
             else ["[No pose detected]"]

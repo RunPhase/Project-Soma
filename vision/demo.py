@@ -5,6 +5,7 @@ demo.py
 Main Thread / 아두이노 연동 없이 Thread 1 파트만 돌려볼 수 있다.
 
 사용법:
+  OPENCV_AVFOUNDATION_SKIP_AUTH=1 python vision/demo.py --debug  
   python demo.py          # 카메라 0, 디버그 창 없음
   python demo.py --debug  # OpenCV 미리보기 창 표시 (q 로 종료)
   python demo.py --cam 1  # 카메라 인덱스 지정
@@ -31,20 +32,21 @@ def print_state_loop(stop_event: threading.Event) -> None:
     while not stop_event.is_set():
         time.sleep(1.0)
         with state_lock:
-            valid = shared_state["cam_valid"]
-            calib = shared_state["calibrated"]
-            neck  = shared_state["neck_angle"]
-            pitch = shared_state["head_pitch"]
-            faceW = shared_state["face_width"]
-            tilt  = shared_state["shoulder_tilt"]
-            ts    = shared_state["cam_timestamp"]
+            valid    = shared_state["cam_valid"]
+            calib    = shared_state["calibrated"]
+            lateral  = shared_state["head_lateral_tilt"]
+            compress = shared_state["neck_compression"]
+            pitch    = shared_state["head_pitch"]
+            faceW    = shared_state["face_width"]
+            tilt     = shared_state["shoulder_tilt"]
+            ts       = shared_state["cam_timestamp"]
 
         status = "OK" if valid else "NO POSE"
         calib_str = "calibrated" if calib else "NOT calibrated"
         print(
             f"[{time.strftime('%H:%M:%S')}] {status} | {calib_str} | "
-            f"neck={neck:5.1f}° pitch={pitch:5.1f}° "
-            f"faceW={faceW:5.1f}px tilt={tilt:.3f}"
+            f"lateral={lateral:5.1f}° compress={compress:.3f} "
+            f"pitch={pitch:5.1f}° faceW={faceW:5.1f}px tilt={tilt:.3f}"
         )
 
 

@@ -9,7 +9,7 @@ shared_state.py
     from shared_state import shared_state, state_lock
 
     with state_lock:
-        shared_state["neck_angle"] = 12.3
+        shared_state["head_lateral_tilt"] = 12.3
         shared_state["cam_timestamp"] = time.time()
 """
 
@@ -21,10 +21,11 @@ state_lock = threading.Lock()
 # ── 공유 상태 딕셔너리 ─────────────────────────────────────────────────────────
 shared_state: dict = {
     # ── Thread 1 — 캠 분석 (내 파트) ───────────────────────────────────────────
-    "neck_angle":    0.0,   # 목 전방 기울기 (도°). 수직 기준 편차.
-    "head_pitch":    0.0,   # 머리 앞뒤 숙임 각도 (도°). PnP 기반.
-    "face_width":    0.0,   # 귀 간 픽셀 거리. 카메라 거리 근사치.
-    "shoulder_tilt": 0.0,   # 어깨 좌우 기울기 비율 (0 ~ 1). 해상도 독립.
+    "head_lateral_tilt": 0.0,  # 머리 좌우 기울기 (도°). 어깨 중심 기준 수직 편차.
+    "neck_compression":  0.0,  # 코-어깨 거리/face_width 비율. 작을수록 거북목.
+    "head_pitch":        0.0,  # 머리 앞뒤 숙임 각도 (도°). PnP 기반.
+    "face_width":        0.0,  # 귀 간 픽셀 거리. 카메라 거리 근사치.
+    "shoulder_tilt":     0.0,  # 어깨 좌우 기울기 비율 (0 ~ 1). 해상도 독립.
 
     "cam_timestamp": 0.0,   # 마지막 캠 업데이트 unix timestamp
     "cam_valid":     False, # 현재 프레임에서 랜드마크를 감지했는지 여부
