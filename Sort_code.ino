@@ -62,11 +62,11 @@ void setup() {
   Wire.begin();
 
   pinMode(xshut1, OUTPUT);
-  pinMode(xshut2, OUTPUT);
+  // pinMode(xshut2, OUTPUT);
 
   // VL53L0X 두 개 모두 OFF
   digitalWrite(xshut1, LOW);
-  digitalWrite(xshut2, LOW);
+  // digitalWrite(xshut2, LOW);
   delay(10);
 
   // 1번 센서 ON 후 주소 변경
@@ -79,13 +79,13 @@ void setup() {
   }
 
   // 2번 센서 ON 후 주소 변경
-  digitalWrite(xshut2, HIGH);
-  delay(10);
+  // digitalWrite(xshut2, HIGH);
+  // delay(10);
 
-  if (!tof2.begin(TOF2_ADDRESS)) {
-    Serial.println(F("VL53L0X_2 연결 실패")); // F() 매크로 적용
-    while (1);
-  }
+  // if (!tof2.begin(TOF2_ADDRESS)) {
+  //   Serial.println(F("VL53L0X_2 연결 실패")); // F() 매크로 적용
+  //   while (1);
+  // }
 
   Serial.println(F("Sensor System Started")); // F() 매크로 적용
 }
@@ -144,10 +144,10 @@ void loop() {
   // 3. 적외선 거리센서 2개 읽기
   // =======================
   VL53L0X_RangingMeasurementData_t measure1;
-  VL53L0X_RangingMeasurementData_t measure2;
+  // VL53L0X_RangingMeasurementData_t measure2;
 
   tof1.rangingTest(&measure1, false);
-  tof2.rangingTest(&measure2, false);
+  // tof2.rangingTest(&measure2, false);
 
   if (measure1.RangeStatus != 4) {
     distance1 = measure1.RangeMilliMeter;
@@ -155,11 +155,11 @@ void loop() {
     distance1 = -1;
   }
 
-  if (measure2.RangeStatus != 4) {
-    distance2 = measure2.RangeMilliMeter;
-  } else {
-    distance2 = -1;
-  }
+  // if (measure2.RangeStatus != 4) {
+  //   distance2 = measure2.RangeMilliMeter;
+  // } else {
+  //   distance2 = -1;
+  // }
 
 // =======================
   // 4. 결과 출력 규격 개조 (CSV 포맷)
@@ -174,8 +174,9 @@ void loop() {
   // 결과적으로 LF, RF, LB, RB 순으로 출력됨
 
   // 2. 거리센서 2개 값 출력 (Out of range인 경우 파이썬 처리를 위해 -1 출력)
-  Serial.print(distance1);        Serial.print(F(","));
-  Serial.print(distance2);        
+  Serial.print(distance1);        
+  // Serial.print(F(","));
+  // Serial.print(distance2);        
   // 결과적으로 1번, 2번 순으로 출력됨
 
   // 줄바꿈으로 한 세트 종료 알림
