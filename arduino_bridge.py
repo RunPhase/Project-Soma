@@ -41,7 +41,7 @@ if __name__ == '__main__':
                     data_fields = line.split(',')
                     
                     # 정상적인 데이터 세트(데이터 6개)가 들어왔는지 검증
-                    if len(data_fields) >= 6:
+                    if len(data_fields) >= 5:
                         try:
                             # 문자열을 정수형 숫자로 변환
                             raw_numbers = list(map(int, data_fields))
