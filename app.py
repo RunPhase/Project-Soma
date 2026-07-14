@@ -1,14 +1,17 @@
 import eventlet
 eventlet.monkey_patch()
 
+# 🌟 Flask 관련 모듈 추가
+from flask import Flask, request, jsonify
 import socketio
 import psycopg2
 import json
 import time
 
-# 1. 서버 설정
+# 1. Flask 앱과 Socket.io 서버 설정을 하나로 결합
 sio = socketio.Server(cors_allowed_origins='*')
-app = socketio.WSGIApp(sio)
+flask_app = Flask(__name__)             # 🌟 HTTP API 요청을 처리할 Flask 인스턴스 생성
+app = socketio.WSGIApp(sio, flask_app)  # 🌟 Socket.io와 Flask 앱을 하나로 묶음
 
 # 2. Supabase 클라우드 DB 설정
 DB_CONFIG = {
@@ -26,6 +29,37 @@ def get_db_connection():
 last_db_save_time = {}   
 DB_SAVE_INTERVAL = 5.0   
 
+# =====================================================================
+# 🌟 [신규 창구] DB 또는 분석 서버로부터 보고서를 받기 위한 HTTP POST 라우터
+# 주소: http://127.0.0.1:5000/api/report
+# =====================================================================
+@flask_app.route('/api/report', methods=['POST'])
+def receive_report():
+    try:
+        # 상대방이 보낸 JSON 데이터 파싱
+        report_data = request.get_json()
+        if not report_data:
+            return jsonify({"status": "error", "message": "JSON 데이터가 누락되었습니다."}), 400
+
+        # 임시로 터미널에 수신된 보고서 출력
+        print("\n==================================================")
+        print("📊 [보고서 수신 완료] 새로운 분석 결과가 도착했습니다!")
+        print(json.dumps(report_data, indent=4, ensure_ascii=False))
+        print("==================================================\n")
+
+        # [다음 단계 대비책]
+        # 1. 수신받은 보고서를 새로운 DB 테이블(예: user_reports)에 저장하는 로직
+        # 2. Socket.io를 통해 프론트엔드로 즉시 보고서 푸시 알림 전송 (예: sio.emit('new_report', report_data))
+        # 등의 후속 처리를 이 아래 공간에서 구현하면 됩니다.
+
+        return jsonify({"status": "success", "message": "보고서가 성공적으로 전달되었습니다."}), 200
+
+    except Exception as e:
+        print(f"❌ 보고서 수신 중 에러 발생: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+# Socket.io 실시간 센서 데이터 처리 (기존 코드 그대로 유지)
 @sio.event
 def connect(sid, environ):
     print(f"클라이언트 접속됨: {sid}")
@@ -37,8 +71,6 @@ def sensor_data(sid, data):
             data = json.loads(data)
         
         device_id = data.get("device_id", "smart_chair_01")
-        
-        # 🌟 페이로드에서 사용자 이름 추출
         user_name = data["data_payload"].get("user_name", "guest")
         
         pressure = data["data_payload"]["chair"]["pressure"]
@@ -77,14 +109,11 @@ def sensor_data(sid, data):
             conn = get_db_connection()
             cur = conn.cursor()
             
-            # 🌟 [핵심 변경] 새로 수정한 테이블 컬럼명(user_name 등)으로 매칭
             query = """
                 INSERT INTO sensor_logs 
                 (user_name, raw_data, balance_status, posture_status) 
                 VALUES (%s, %s, %s, %s)
             """
-            
-            # user_name 컬럼에 정확히 user_name 변수만 삽입하도록 수정
             cur.execute(query, (
                 user_name, 
                 json.dumps(data['data_payload']), 
