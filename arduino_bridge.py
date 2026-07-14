@@ -6,8 +6,7 @@ import serial
 import socketio
 import time
 
-# 1. 아두이노 연결 설정 (포트 번호는 아두이노 연결 후 확인하여 수정)
-# 예: Windows는 'COM3', 'COM4' 등 / Mac은 '/dev/tty.usbmodem...' 형태
+# 1. 아두이노 연결 설정 (포트 번호는 장치관리자에서 확인한 번호 유지)
 ARDUINO_PORT = 'COM3' 
 BAUD_RATE = 9600
 
@@ -33,21 +32,23 @@ if __name__ == '__main__':
         
         while True:
             if py_serial.readable():
-                # 아두이노가 보낸 한 줄 읽기 (예: "900,700,1000,910,250,300\n")
+                # 아두이노가 보낸 한 줄 읽기
                 line = py_serial.readline().decode('utf-8').strip()
                 
                 if line:
                     # 콤마로 데이터 분리
                     data_fields = line.split(',')
                     
-                    # 정상적인 데이터 세트(데이터 6개)가 들어왔는지 검증
+                    # 🌟 [핵심 변경] 데이터 5개 규격으로 검증 조건 완화
                     if len(data_fields) >= 5:
                         try:
-                            # 문자열을 정수형 숫자로 변환
-                            raw_numbers = list(map(int, data_fields))
+                            # 혹시 모를 공백이나 줄바꿈 문자를 제거하고 5개만 정확히 숫자로 변환
+                            raw_numbers = [int(x.strip()) for x in data_fields[:5]]
                             
-                            pressure_data = raw_numbers[0:4]  # FL, FR, BL, BR
-                            distance_data = raw_numbers[4:6]   # dist1, dist2
+                            pressure_data = raw_numbers[0:4]  # 인덱스 0~3: 압력 센서 4개
+                            
+                            # 🌟 [핵심 변경] app.py가 에러를 뿜지 않도록 대괄호[]로 감싸서 리스트로 만듦
+                            distance_data = [raw_numbers[4]]  # 인덱스 4: 거리 센서 1개
                             
                             # app.py 규격에 맞게 포장
                             payload = {
@@ -57,8 +58,8 @@ if __name__ == '__main__':
                                         "pressure": pressure_data
                                     },
                                     "vision": {
-                                        "blink_count": 0, # 시선 추적 연동 전까지 임시값
-                                        "distances": distance_data # 거리 데이터 확장 확장
+                                        "blink_count": 0, 
+                                        "distances": distance_data
                                     }
                                 }
                             }
