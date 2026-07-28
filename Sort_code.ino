@@ -147,10 +147,10 @@ void loop() {
   Serial.print(rightBackValue);   Serial.print(F(","));
 
   // 1번 거리센서 출력
-  Serial.print(distance1);        Serial.print(F(","));
+  Serial.print(distance1);        Serial.print(F(" "));
   
   // [핵심] 파이썬 백엔드 호환성을 위해 삭제된 2번 센서 자리에 -1 고정 출력
-  Serial.print(-1);
+  Serial.print(" ");
 
   // 줄바꿈으로 한 세트 종료
   Serial.println();
